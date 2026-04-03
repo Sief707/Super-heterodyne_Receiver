@@ -4,93 +4,158 @@ close all
 
 disp("=== TEST: MODULATION ===")
 
-%% Load signal
+%% Load signals
 signals = load_signals();
 
-%% Interpolate signal (Phase 2)
+%% Interpolate signals (Phase 2)
 L = 60;
 signals = interpolate_signal(signals, L);
 
-message = signals.signal;
-Fs      = signals.Fs;
+messages = signals.messages;
+Fs       = signals.Fs;
 
 disp("Sampling Frequency After Interpolation:")
 disp(Fs)
 
-%% Create multiple messages for FDM
+num_stations = length(messages);
 
-% Here we duplicate the same signal to simulate multiple stations
-messages = {message , message};
+disp("Number of stations loaded:")
+disp(num_stations)
 
 %% Build FDM Signal (Phase 3)
 fdm = build_fdm_signal(messages, Fs);
 disp("FDM signal generated successfully")
 
-%% Compute FFT of multiplexed signal
-N = length(fdm);
+%% ---------------------------------------------------------
+%% FFT analysis window (prevents memory overflow)
+%% ---------------------------------------------------------
 
-% Frequency axis
+analysis_length = min(200000, length(fdm));
+fdm_segment = fdm(1:analysis_length);
+
+N = length(fdm_segment);
+
+%% Frequency axis
 f = (-N/2:N/2-1)*(Fs/N);
 
-% FFT computation
-X = fftshift(fft(fdm));
+%% FFT computation
+X = fftshift(fft(fdm_segment));
 
-% Normalize magnitude for better visualization
+%% Normalize magnitude
 X = abs(X) / max(abs(X));
+
+
 
 %% ---------------------------------------------------------
 %% Plot 1 : RF Spectrum (Original multiplexed plot)
 %% ---------------------------------------------------------
 
 figure
-plot(f, X)
 
-title("FDM Spectrum")
-xlabel("Frequency (Hz)")
+plot(f/1000, X)
+
+title("FDM Multiplexed Spectrum (All Stations)")
+xlabel("Frequency (kHz)")
 ylabel("Normalized Magnitude")
 grid on
 
-% Focus on RF band
-xlim([80000 150000])
+xlim([-360 360])
+
 
 %% ---------------------------------------------------------
-%% Plot 2 : RF Spectrum in kHz (cleaner visualization)
+%% Plot 2 : Full Spectrum View
 %% ---------------------------------------------------------
 
 figure
 plot(f/1000, X)
 
-title("FDM Spectrum (RF Region)")
+title("Full Spectrum View (Zoomed In)")
 xlabel("Frequency (kHz)")
 ylabel("Normalized Magnitude")
 grid on
 
-xlim([80 150])
+xlim([70 250])
+
 
 %% ---------------------------------------------------------
-%% Plot 3 : Full Spectrum View
+%% Plot 3 : RF Spectrum of Individual Stations (Colored)
 %% ---------------------------------------------------------
 
 figure
-plot(f/1000, X)
+colors = lines(num_stations);
 
-title("Full Spectrum View")
+hold on
+
+analysis_length = min(200000, length(messages{1}));
+
+for k = 1:num_stations
+    
+    msg = messages{k};
+    
+    msg_segment = msg(1:analysis_length);
+    
+    Fc = 100e3 + (k-1)*30e3;
+    
+    modulated = dsb_sc_modulate(msg_segment, Fc, Fs);
+    
+    Nk = length(modulated);
+    
+    fk = (-Nk/2:Nk/2-1)*(Fs/Nk);
+    
+    Xk = fftshift(fft(modulated));
+    Xk = abs(Xk)/max(abs(Xk));
+    
+    plot(fk/1000, Xk, 'Color', colors(k,:), 'LineWidth', 1.3)
+
+end
+
+title("RF Spectrum of Individual Stations")
 xlabel("Frequency (kHz)")
 ylabel("Normalized Magnitude")
 grid on
 
+xlim([-360 360])
+
+legend("Station 1","Station 2","Station 3","Station 4","Station 5")
+
 %% ---------------------------------------------------------
-%% Plot 4 : Zoom into first station (around 100 kHz)
+%% Plot RF Spectrum of Each Station Separately
 %% ---------------------------------------------------------
 
-figure
-plot(f/1000, X)
+colors = lines(num_stations);
 
-title("Station Around 100 kHz")
-xlabel("Frequency (kHz)")
-ylabel("Normalized Magnitude")
-grid on
+analysis_length = min(200000, length(messages{1}));
 
-xlim([90 110])
+for k = 1:num_stations
+
+    msg = messages{k};
+
+    msg_segment = msg(1:analysis_length);
+
+    % Carrier frequency
+    Fc = 100e3 + (k-1)*30e3;
+
+    % Modulate station
+    modulated = dsb_sc_modulate(msg_segment, Fc, Fs);
+
+    % FFT
+    Nk = length(modulated);
+    fk = (-Nk/2:Nk/2-1)*(Fs/Nk);
+
+    Xk = fftshift(fft(modulated));
+    Xk = abs(Xk)/max(abs(Xk));
+
+    % Plot
+    figure
+    plot(fk/1000, Xk, 'Color', colors(k,:), 'LineWidth', 1.5)
+
+    title(sprintf("RF Spectrum of Station %d",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    grid on
+    xlim([-280 280])
+
+end
 
 disp("Modulation test completed successfully")
