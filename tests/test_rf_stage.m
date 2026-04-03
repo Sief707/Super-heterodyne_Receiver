@@ -4,35 +4,62 @@ close all
 
 disp("=== TEST: RF STAGE ===")
 
-% Load signal
-signals = load_signals;
+%% Load configuration
+config = system_config();
 
-% Interpolate
-signals = interpolate_signal(signals,60);
+%% Load signals
+signals = load_signals();
 
-message = signals.signal;
-Fs      = signals.Fs;
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
-% Build two-station FDM
-messages = {message , message};
+messages = signals.messages;
+Fs       = signals.Fs;
+
+num_stations = length(messages);
+
+disp("Number of stations loaded:")
+disp(num_stations)
+
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages, Fs);
 
-% Apply RF filter (select 100 kHz station)
-rf_signal = rf_stage_filter(fdm, Fs, 100e3);
+disp("FDM signal generated")
 
-% Spectrum analysis
-N = length(rf_signal);
-f = (-N/2:N/2-1)*(Fs/N);
+%% FFT analysis window (prevents memory overflow)
+analysis_length = min(200000, length(fdm));
+fdm_segment = fdm(1:analysis_length);
 
-X = abs(fftshift(fft(rf_signal)));
-X = X / max(X);
+%% Loop through stations
+colors = lines(num_stations);
 
-figure
-plot(f/1000, X)
+for k = 1:num_stations
 
-title("RF Stage Output")
-xlabel("Frequency (kHz)")
-ylabel("Normalized Magnitude")
-grid on
+    disp(["Testing RF filter for station ", num2str(k)])
 
-xlim([80 150])
+    % Compute carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
+
+    % Apply RF filter
+    rf_signal = rf_stage_filter(fdm_segment, Fs, Fc);
+
+    %% FFT
+    N = length(rf_signal);
+    f = (-N/2:N/2-1)*(Fs/N);
+
+    X = fftshift(fft(rf_signal));
+    X = abs(X)/max(abs(X));
+
+    %% Plot
+    figure
+
+    plot(f/1000, X, 'Color', colors(k,:), 'LineWidth',1.5)
+
+    title(sprintf("RF Stage Output - Station %d",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    grid on
+    xlim([70 250])
+
+end
