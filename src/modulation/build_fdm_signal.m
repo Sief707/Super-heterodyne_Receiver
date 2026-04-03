@@ -1,26 +1,64 @@
 function fdm_signal = build_fdm_signal(messages, Fs)
 
-    % Number of signals
-    num_signals = length(messages);
+% -------------------------------------------------
+% BUILD FDM SIGNAL
+%
+% Combines multiple modulated stations into a
+% single multiplexed RF signal.
+%
+% Inputs
+% -------
+% messages{k} : baseband audio signals
+% Fs          : sampling frequency
+%
+% Output
+% -------
+% fdm_signal  : multiplexed RF signal
+% -------------------------------------------------
 
-    % Carrier parameters
-    base_carrier = 100e3;
-    deltaF       = 30e3;
+% Number of stations
+num_signals = length(messages);
 
-    % Signal length
-    N = length(messages{1});
+% Carrier parameters
+base_carrier = 100e3;
+deltaF       = 30e3;
 
-    % Initialize FDM signal
-    fdm_signal = zeros(N,1);
+% -------------------------------------------------
+% Determine common signal length
+% -------------------------------------------------
 
-    for n = 1:num_signals
-        
-        Fc = base_carrier + (n-1)*deltaF;
-        
-        modulated = dsb_sc_modulate(messages{n}, Fc, Fs);
-        
-        fdm_signal = fdm_signal + modulated;
-        
-    end
+lengths = zeros(num_signals,1);
+
+for k = 1:num_signals
+    lengths(k) = length(messages{k});
+end
+
+N = min(lengths);   % shortest signal
+
+% -------------------------------------------------
+% Initialize multiplexed signal
+% -------------------------------------------------
+
+fdm_signal = zeros(N,1);
+
+% -------------------------------------------------
+% Modulate and combine each station
+% -------------------------------------------------
+
+for n = 1:num_signals
+    
+    % Carrier frequency of station
+    Fc = base_carrier + (n-1)*deltaF;
+    
+    % Truncate signal to common length
+    signal = messages{n}(1:N);
+    
+    % DSB-SC modulation
+    modulated = dsb_sc_modulate(signal, Fc, Fs);
+    
+    % Add to multiplexed signal
+    fdm_signal = fdm_signal + modulated;
+    
+end
 
 end
