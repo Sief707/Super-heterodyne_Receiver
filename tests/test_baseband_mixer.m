@@ -4,34 +4,71 @@ close all
 
 disp("=== TEST: BASEBAND MIXER ===")
 
-signals = load_signals;
-signals = interpolate_signal(signals,60);
+%% Load configuration
+config = system_config();
 
-message = signals.signal;
-Fs = signals.Fs;
+%% Load signals
+signals = load_signals();
 
-messages = {message,message};
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
+messages = signals.messages;
+Fs       = signals.Fs;
+
+num_stations = length(messages);
+
+disp("Number of stations loaded:")
+disp(num_stations)
+
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+disp("FDM signal generated")
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Safe FFT window
+analysis_length = min(200000, length(fdm));
+fdm_segment = fdm(1:analysis_length);
 
-if_signal = if_stage_filter(mixed,Fs);
+colors = lines(num_stations);
 
-baseband = baseband_mixer(if_signal,Fs);
+%% Loop through stations
+for k = 1:num_stations
 
-N = length(baseband);
-f = (-N/2:N/2-1)*(Fs/N);
+    disp(["Testing baseband mixer for station ", num2str(k)])
 
-X = abs(fftshift(fft(baseband)));
-X = X/max(X);
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
 
-figure
-plot(f/1000,X)
-xlim([0 40])
-title("Baseband Mixer Output")
-xlabel("Frequency (kHz)")
-ylabel("Normalized Magnitude")
-grid on
+    % RF filter
+    rf = rf_stage_filter(fdm_segment,Fs,Fc);
+
+    % RF → IF mixer
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf,Fs,f_LO);
+
+    % IF filter
+    if_signal = if_stage_filter(mixed,Fs);
+
+    % IF → baseband mixer
+    baseband = baseband_mixer(if_signal,Fs);
+
+    %% FFT
+    N = length(baseband);
+    f = (-N/2:N/2-1)*(Fs/N);
+
+    X = fftshift(fft(baseband));
+    X = abs(X)/max(abs(X));
+
+    %% Plot
+    figure
+    plot(f/1000,X,'Color',colors(k,:),'LineWidth',1.5)
+
+    title(sprintf("Baseband Mixer Output - Station %d",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    grid on
+    xlim([-70 70])
+
+end
