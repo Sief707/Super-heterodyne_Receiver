@@ -4,38 +4,67 @@ close all
 
 disp("=== TEST: DECIMATION ===")
 
-signals = load_signals;
+%% Load configuration
+config = system_config();
 
-signals = interpolate_signal(signals,60);
+%% Load signals
+signals = load_signals();
 
-% run full receiver chain
-message = signals.signal;
-Fs = signals.Fs;
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
-messages = {message,message};
+messages = signals.messages;
+Fs       = signals.Fs;
 
+num_stations = length(messages);
+
+disp("Number of stations loaded:")
+disp(num_stations)
+
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+disp("FDM signal generated")
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Loop through stations
+for k = 1:num_stations
 
-if_signal = if_stage_filter(mixed,Fs);
+    disp(["Testing decimation for station ", num2str(k)])
 
-baseband = baseband_mixer(if_signal,Fs);
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
 
-audio_high = baseband_lpf(baseband,Fs);
+    % RF filter
+    rf = rf_stage_filter(fdm,Fs,Fc);
 
-% prepare struct for decimator
-temp.signal = audio_high;
-temp.Fs = Fs;
+    % RF → IF mixer
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf,Fs,f_LO);
 
-signals_out = decimate_signal(temp,60);
+    % IF filter
+    if_signal = if_stage_filter(mixed,Fs);
 
-audio = signals_out.signal;
-Fs_audio = signals_out.Fs;
+    % IF → baseband mixer
+    baseband = baseband_mixer(if_signal,Fs);
 
-disp("New sampling frequency:")
-disp(Fs_audio)
+    % Baseband LPF
+    audio_high = baseband_lpf(baseband,Fs);
 
-sound(audio, Fs_audio)
+    %% Prepare struct for decimator
+    temp.signal = audio_high;
+    temp.Fs     = Fs;
+
+    signals_out = decimate_signal(temp,config.L);
+
+    audio = signals_out.signal;
+    Fs_audio = signals_out.Fs;
+
+    disp("Recovered sampling frequency:")
+    disp(Fs_audio)
+
+    %% Play audio
+    sound(audio, Fs_audio)
+
+    pause(5)   % allow audio playback before next station
+
+end
