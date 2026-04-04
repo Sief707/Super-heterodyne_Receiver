@@ -4,75 +4,85 @@ close all
 
 disp("=== TEST: AUDIO RECOVERY ===")
 
-% -------------------------------------------------
-% Load original signal
-% -------------------------------------------------
+%% Load configuration
+config = system_config();
 
-signals = load_signals;
+%% Load signals
+signals = load_signals();
 
-original_signal = signals.signal;
-Fs = signals.Fs;
+original_messages = signals.messages;
+Fs_original       = signals.Fs;
 
-% -------------------------------------------------
-% Run transmitter + receiver chain
-% -------------------------------------------------
+num_stations = length(original_messages);
 
-signals = interpolate_signal(signals,60);
+disp("Number of stations loaded:")
+disp(num_stations)
 
-message = signals.signal;
-Fs = signals.Fs;
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
-messages = {message , message};
+messages = signals.messages;
+Fs       = signals.Fs;
 
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+colors = lines(num_stations);
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Loop through stations
+for k = 1:num_stations
 
-if_signal = if_stage_filter(mixed,Fs);
+    disp(["Recovering audio for station ", num2str(k)])
 
-baseband = baseband_mixer(if_signal,Fs);
+    original_signal = original_messages{k};
 
-recovered_audio = baseband_lpf(baseband,Fs);
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
 
-% -------------------------------------------------
-% Normalize recovered audio
-% -------------------------------------------------
+    % RF filter
+    rf = rf_stage_filter(fdm,Fs,Fc);
 
-recovered_audio = recovered_audio / max(abs(recovered_audio));
+    % RF → IF mixer
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf,Fs,f_LO);
 
-% -------------------------------------------------
-% Downsample audio using project decimation module
-% -------------------------------------------------
+    % IF filter
+    if_signal = if_stage_filter(mixed,Fs);
 
-% Prepare structure input for decimator
-temp.signal = recovered_audio;
-temp.Fs     = Fs;
+    % IF → baseband mixer
+    baseband = baseband_mixer(if_signal,Fs);
 
-% Decimate by the interpolation factor
-signals_out = decimate_signal(temp,60);
+    % Baseband LPF
+    recovered_audio = baseband_lpf(baseband,Fs);
 
-audio_play = signals_out.signal;
-Fs_audio   = signals_out.Fs;
+    % Normalize recovered audio
+    recovered_audio = recovered_audio / max(abs(recovered_audio));
 
-% -------------------------------------------------
-% Play recovered audio
-% -------------------------------------------------
+    %% Downsample audio using project decimation module
 
-disp("Playing recovered audio...")
-sound(audio_play, Fs_audio)
+    temp.signal = recovered_audio;
+    temp.Fs     = Fs;
 
-% -------------------------------------------------
-% Compare signals (visual)
-% -------------------------------------------------
+    signals_out = decimate_signal(temp,config.L);
 
-figure
+    audio_play = signals_out.signal;
+    Fs_audio   = signals_out.Fs;
 
-subplot(2,1,1)
-plot(original_signal)
-title("Original Audio Signal")
+    %% Play recovered audio
+    disp("Playing recovered audio...")
+    sound(audio_play, Fs_audio)
 
-subplot(2,1,2)
-plot(recovered_audio)
-title("Recovered Audio Signal")
+    pause(5)
+
+    %% Visual comparison
+    figure
+
+    subplot(2,1,1)
+    plot(original_signal,'Color',colors(k,:))
+    title(sprintf("Original Audio Signal - Station %d",k))
+
+    subplot(2,1,2)
+    plot(recovered_audio,'Color',colors(k,:))
+    title(sprintf("Recovered Audio Signal - Station %d",k))
+
+end
