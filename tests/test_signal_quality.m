@@ -4,102 +4,115 @@ close all
 
 disp("=== TEST: SIGNAL QUALITY ===")
 
-% -------------------------------------------------
-% Load original signal
-% -------------------------------------------------
+%% Load configuration
+config = system_config();
 
-signals = load_signals;
+%% Load signals
+signals = load_signals();
 
-original = signals.signal;
-Fs_original = signals.Fs;
+original_messages = signals.messages;
+Fs_original       = signals.Fs;
 
-% -------------------------------------------------
-% Run full receiver chain
-% -------------------------------------------------
+num_stations = length(original_messages);
 
-signals = interpolate_signal(signals,60);
+disp("Number of stations loaded:")
+disp(num_stations)
 
-message = signals.signal;
-Fs = signals.Fs;
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
-messages = {message,message};
+messages = signals.messages;
+Fs       = signals.Fs;
 
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+colors = lines(num_stations);
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Loop through stations
+for k = 1:num_stations
 
-if_signal = if_stage_filter(mixed,Fs);
+    disp(["Computing signal quality for station ", num2str(k)])
 
-baseband = baseband_mixer(if_signal,Fs);
+    original = original_messages{k};
 
-audio_high = baseband_lpf(baseband,Fs);
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
 
-% -------------------------------------------------
-% Decimate to return to audio sampling rate
-% -------------------------------------------------
+    % RF filter
+    rf = rf_stage_filter(fdm,Fs,Fc);
 
-temp.signal = audio_high;
-temp.Fs = Fs;
+    % RF → IF mixer
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf,Fs,f_LO);
 
-signals_out = decimate_signal(temp,60);
+    % IF filter
+    if_signal = if_stage_filter(mixed,Fs);
 
-recovered = signals_out.signal;
-Fs_audio = signals_out.Fs;
+    % IF → baseband mixer
+    baseband = baseband_mixer(if_signal,Fs);
 
-% -------------------------------------------------
-% Normalize signals for fair comparison
-% -------------------------------------------------
+    % Baseband LPF
+    audio_high = baseband_lpf(baseband,Fs);
 
-original = original / max(abs(original));
-recovered = recovered / max(abs(recovered));
+    %% Decimate
+    temp.signal = audio_high;
+    temp.Fs     = Fs;
 
-% -------------------------------------------------
-% Align signals using cross-correlation
-% -------------------------------------------------
+    signals_out = decimate_signal(temp,config.L);
 
-[c,lags] = xcorr(recovered, original);
-[~,idx] = max(abs(c));
+    recovered = signals_out.signal;
+    Fs_audio  = signals_out.Fs;
 
-delay = lags(idx);
+    %% Normalize signals
+    original  = original / max(abs(original));
+    recovered = recovered / max(abs(recovered));
 
-if delay > 0
-    recovered = recovered(delay+1:end);
-    original = original(1:length(recovered));
-else
-    original = original(-delay+1:end);
-    recovered = recovered(1:length(original));
+   %% -------------------------------------------------
+   %% Align signals using cross-correlation
+   %% -------------------------------------------------
+
+   [c,lags] = xcorr(recovered, original);
+
+   [~,idx] = max(abs(c));
+
+   delay = lags(idx);
+
+   if delay > 0
+      recovered = recovered(delay+1:end);
+   else
+     original = original(-delay+1:end);
+   end
+
+   % Force equal lengths safely
+   min_len = min(length(original), length(recovered));
+
+   original  = original(1:min_len);
+   recovered = recovered(1:min_len);
+
+    %% Compute SNR
+    error_signal = original - recovered;
+
+    signal_power = sum(original.^2);
+    error_power  = sum(error_signal.^2);
+
+    SNR = 10*log10(signal_power/error_power);
+
+    disp("Recovered audio sampling rate:")
+    disp(Fs_audio)
+
+    disp("Signal-to-Noise Ratio (dB):")
+    disp(SNR)
+
+    %% Plot comparison
+    figure
+
+    subplot(2,1,1)
+    plot(original,'Color',colors(k,:))
+    title(sprintf("Original Signal - Station %d",k))
+
+    subplot(2,1,2)
+    plot(recovered,'Color',colors(k,:))
+    title(sprintf("Recovered Signal - Station %d",k))
+
 end
-
-
-% -------------------------------------------------
-% Compute SNR
-% -------------------------------------------------
-
-error_signal = original - recovered;
-
-signal_power = sum(original.^2);
-error_power  = sum(error_signal.^2);
-
-SNR = 10*log10(signal_power/error_power);
-
-disp("Recovered audio sampling rate:")
-disp(Fs_audio)
-
-disp("Signal-to-Noise Ratio (dB):")
-disp(SNR)
-
-% -------------------------------------------------
-% Plot comparison
-% -------------------------------------------------
-
-figure
-
-subplot(2,1,1)
-plot(original)
-title("Original Signal")
-
-subplot(2,1,2)
-plot(recovered)
-title("Recovered Signal")
