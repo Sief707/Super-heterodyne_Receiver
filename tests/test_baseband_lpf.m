@@ -4,36 +4,74 @@ close all
 
 disp("=== TEST: BASEBAND LPF ===")
 
-signals = load_signals;
-signals = interpolate_signal(signals,60);
+%% Load configuration
+config = system_config();
 
-message = signals.signal;
-Fs = signals.Fs;
+%% Load signals
+signals = load_signals();
 
-messages = {message,message};
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
 
+messages = signals.messages;
+Fs       = signals.Fs;
+
+num_stations = length(messages);
+
+disp("Number of stations loaded:")
+disp(num_stations)
+
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+disp("FDM signal generated")
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Safe FFT window
+analysis_length = min(200000, length(fdm));
+fdm_segment = fdm(1:analysis_length);
 
-if_signal = if_stage_filter(mixed,Fs);
+colors = lines(num_stations);
 
-baseband = baseband_mixer(if_signal,Fs);
+%% Loop through stations
+for k = 1:num_stations
 
-audio = baseband_lpf(baseband,Fs);
+    disp(["Testing baseband LPF for station ", num2str(k)])
 
-% spectrum check
-N = length(audio);
-f = (-N/2:N/2-1)*(Fs/N);
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
 
-X = abs(fftshift(fft(audio)));
-X = X/max(X);
+    % RF filter
+    rf = rf_stage_filter(fdm_segment,Fs,Fc);
 
-figure
-plot(f/1000,X)
-xlim([0 20])
-title("Recovered Audio Spectrum")
-xlabel("Frequency (kHz)")
-grid on
+    % RF → IF mixer
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf,Fs,f_LO);
+
+    % IF filter
+    if_signal = if_stage_filter(mixed,Fs);
+
+    % IF → baseband mixer
+    baseband = baseband_mixer(if_signal,Fs);
+
+    % Baseband LPF
+    audio = baseband_lpf(baseband,Fs);
+
+    %% FFT
+    N = length(audio);
+    f = (-N/2:N/2-1)*(Fs/N);
+
+    X = fftshift(fft(audio));
+    X = abs(X)/max(abs(X));
+
+    %% Plot
+    figure
+    plot(f/1000,X,'Color',colors(k,:),'LineWidth',1.5)
+
+    title(sprintf("Recovered Audio Spectrum - Station %d",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    grid on
+    xlim([-20 20])
+
+end
