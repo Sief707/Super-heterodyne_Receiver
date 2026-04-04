@@ -2,31 +2,70 @@ clc
 clear
 close all
 
-signals = load_signals;
-signals = interpolate_signal(signals,60);
+disp("=== TEST: IF STAGE ===")
 
-message = signals.signal;
-Fs = signals.Fs;
+%% Load configuration
+config = system_config();
 
-messages = {message,message};
+%% Load signals
+signals = load_signals();
 
+%% Interpolate signals
+signals = interpolate_signal(signals, config.L);
+
+messages = signals.messages;
+Fs       = signals.Fs;
+
+num_stations = length(messages);
+
+disp("Number of stations loaded:")
+disp(num_stations)
+
+%% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
 
-rf = rf_stage_filter(fdm,Fs,100e3);
+disp("FDM signal generated")
 
-mixed = mixer_stage(rf,Fs,115e3);
+%% Safe FFT window
+analysis_length = min(200000, length(fdm));
+fdm_segment = fdm(1:analysis_length);
 
-if_signal = if_stage_filter(mixed,Fs);
+colors = lines(num_stations);
 
-N = length(if_signal);
-f = (-N/2:N/2-1)*(Fs/N);
+%% Loop through stations
+for k = 1:num_stations
 
-X = abs(fftshift(fft(if_signal)));
-X = X/max(X);
+    disp(["Testing IF stage for station ", num2str(k)])
 
-figure
-plot(f/1000,X)
-xlim([0 50])
-title("IF Stage Output")
-xlabel("Frequency (kHz)")
-grid on
+    % Carrier frequency
+    Fc = config.Fc0 + (k-1)*config.deltaF;
+
+    % RF filter (select station)
+    rf = rf_stage_filter(fdm_segment, Fs, Fc);
+
+    % Mixer (RF → IF)
+    f_LO = Fc + config.IF;
+    mixed = mixer_stage(rf, Fs, f_LO);
+
+    % IF filter
+    if_signal = if_stage_filter(mixed, Fs);
+
+    %% FFT
+    N = length(if_signal);
+    f = (-N/2:N/2-1)*(Fs/N);
+
+    X = fftshift(fft(if_signal));
+    X = abs(X)/max(abs(X));
+
+    %% Plot
+    figure
+    plot(f/1000, X, 'Color', colors(k,:), 'LineWidth',1.5)
+
+    title(sprintf("IF Stage Output - Station %d",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    grid on
+    xlim([-45 45])
+
+end
