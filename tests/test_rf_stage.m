@@ -1,6 +1,3 @@
-clc
-clear
-close all
 
 disp("=== TEST: RF STAGE ===")
 
@@ -26,22 +23,21 @@ fdm = build_fdm_signal(messages, Fs);
 
 disp("FDM signal generated")
 
-%% FFT analysis window (prevents memory overflow)
-analysis_length = min(200000, length(fdm));
-fdm_segment = fdm(1:analysis_length);
 
-%% Loop through stations
+%% Prepare figure
+figure
+
 colors = lines(num_stations);
 
 for k = 1:num_stations
 
     disp(["Testing RF filter for station ", num2str(k)])
 
-    % Compute carrier frequency
+    % Carrier frequency
     Fc = config.Fc0 + (k-1)*config.deltaF;
 
-    % Apply RF filter
-    rf_signal = rf_stage_filter(fdm_segment, Fs, Fc);
+    % RF filter
+    rf_signal = rf_stage_filter(fdm, Fs, Fc);
 
     %% FFT
     N = length(rf_signal);
@@ -50,16 +46,16 @@ for k = 1:num_stations
     X = fftshift(fft(rf_signal));
     X = abs(X)/max(abs(X));
 
-    %% Plot
-    figure
+    %% Subplot
+    subplot(num_stations,1,k)
 
-    plot(f/1000, X, 'Color', colors(k,:), 'LineWidth',1.5)
+    plot(f/1000 , X , 'Color', colors(k,:) , 'LineWidth',1.5)
 
     title(sprintf("RF Stage Output - Station %d",k))
     xlabel("Frequency (kHz)")
     ylabel("Normalized Magnitude")
 
     grid on
-    xlim([70 250])
+    xlim([-250 250])
 
 end

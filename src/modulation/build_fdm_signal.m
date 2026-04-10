@@ -1,62 +1,41 @@
 function fdm_signal = build_fdm_signal(messages, Fs)
 
-% -------------------------------------------------
-% BUILD FDM SIGNAL
-%
-% Combines multiple modulated stations into a
-% single multiplexed RF signal.
-%
-% Inputs
-% -------
-% messages{k} : baseband audio signals
-% Fs          : sampling frequency
-%
-% Output
-% -------
-% fdm_signal  : multiplexed RF signal
-% -------------------------------------------------
+% Load configuration
+config = system_config();
 
-% Number of stations
+% Determine number of stations
 num_signals = length(messages);
 
-% Carrier parameters
-base_carrier = 100e3;
-deltaF       = 30e3;
+% Define carrier parameters
+base_carrier = config.Fc0;   % Carrier frequency of first station (100 kHz)
+deltaF       = config.deltaF;    % Frequency spacing between stations
 
-% -------------------------------------------------
-% Determine common signal length
-% -------------------------------------------------
-
+% Determine lengths of all message signals
 lengths = zeros(num_signals,1);
 
 for k = 1:num_signals
     lengths(k) = length(messages{k});
 end
 
-N = min(lengths);   % shortest signal
+% Use the shortest signal length to ensure equal size
+N = min(lengths);
 
-% -------------------------------------------------
-% Initialize multiplexed signal
-% -------------------------------------------------
-
+% Initialize multiplexed FDM signal
 fdm_signal = zeros(N,1);
 
-% -------------------------------------------------
-% Modulate and combine each station
-% -------------------------------------------------
-
+% Loop through all stations
 for n = 1:num_signals
     
-    % Carrier frequency of station
+    % Compute carrier frequency for the current station
     Fc = base_carrier + (n-1)*deltaF;
     
-    % Truncate signal to common length
+    % Truncate message to the common signal length
     signal = messages{n}(1:N);
     
-    % DSB-SC modulation
+    % Perform DSB-SC modulation
     modulated = dsb_sc_modulate(signal, Fc, Fs);
     
-    % Add to multiplexed signal
+    % Add modulated signal to the multiplexed FDM signal
     fdm_signal = fdm_signal + modulated;
     
 end

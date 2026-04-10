@@ -1,6 +1,3 @@
-clc
-clear
-close all
 
 disp("=== TEST: BASEBAND MIXER ===")
 
@@ -26,10 +23,11 @@ fdm = build_fdm_signal(messages,Fs);
 
 disp("FDM signal generated")
 
-%% Safe FFT window
-analysis_length = min(200000, length(fdm));
-fdm_segment = fdm(1:analysis_length);
 
+colors = lines(num_stations);
+
+%% Prepare figure
+figure
 colors = lines(num_stations);
 
 %% Loop through stations
@@ -38,13 +36,13 @@ for k = 1:num_stations
     disp(["Testing baseband mixer for station ", num2str(k)])
 
     % Carrier frequency
-    Fc = config.Fc0 + (k-1)*config.deltaF;
+    Fc = config.Fc0 + (k-1)*config.deltaF ;
 
     % RF filter
-    rf = rf_stage_filter(fdm_segment,Fs,Fc);
+    rf = rf_stage_filter(fdm,Fs,Fc);
 
     % RF → IF mixer
-    f_LO = Fc + config.IF;
+    f_LO = Fc + config.IF + config.f1 ; %% test frequency offset
     mixed = mixer_stage(rf,Fs,f_LO);
 
     % IF filter
@@ -60,8 +58,9 @@ for k = 1:num_stations
     X = fftshift(fft(baseband));
     X = abs(X)/max(abs(X));
 
-    %% Plot
-    figure
+    %% Subplot
+    subplot(num_stations,1,k)
+
     plot(f/1000,X,'Color',colors(k,:),'LineWidth',1.5)
 
     title(sprintf("Baseband Mixer Output - Station %d",k))
@@ -72,3 +71,5 @@ for k = 1:num_stations
     xlim([-70 70])
 
 end
+
+sgtitle("Baseband Mixer Verification - Spectra")

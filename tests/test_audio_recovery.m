@@ -1,6 +1,3 @@
-clc
-clear
-close all
 
 disp("=== TEST: AUDIO RECOVERY ===")
 
@@ -72,7 +69,7 @@ for k = 1:num_stations
     disp("Playing recovered audio...")
     sound(audio_play, Fs_audio)
 
-    pause(5)
+    pause(length(audio_play)/Fs_audio)
 
     %% Visual comparison
     figure
@@ -84,5 +81,6 @@ for k = 1:num_stations
     subplot(2,1,2)
     plot(recovered_audio,'Color',colors(k,:))
     title(sprintf("Recovered Audio Signal - Station %d",k))
+    % saveas(gcf,"../results/test_audio_recovery/station_"+k+"_comparison.png")
 
 end

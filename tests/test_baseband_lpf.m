@@ -1,6 +1,3 @@
-clc
-clear
-close all
 
 disp("=== TEST: BASEBAND LPF ===")
 
@@ -26,10 +23,11 @@ fdm = build_fdm_signal(messages,Fs);
 
 disp("FDM signal generated")
 
-%% Safe FFT window
-analysis_length = min(200000, length(fdm));
-fdm_segment = fdm(1:analysis_length);
 
+
+
+%% Prepare figure
+figure
 colors = lines(num_stations);
 
 %% Loop through stations
@@ -41,7 +39,7 @@ for k = 1:num_stations
     Fc = config.Fc0 + (k-1)*config.deltaF;
 
     % RF filter
-    rf = rf_stage_filter(fdm_segment,Fs,Fc);
+    rf = rf_stage_filter(fdm,Fs,Fc);
 
     % RF → IF mixer
     f_LO = Fc + config.IF;
@@ -63,8 +61,9 @@ for k = 1:num_stations
     X = fftshift(fft(audio));
     X = abs(X)/max(abs(X));
 
-    %% Plot
-    figure
+    %% Subplot
+    subplot(num_stations,1,k)
+
     plot(f/1000,X,'Color',colors(k,:),'LineWidth',1.5)
 
     title(sprintf("Recovered Audio Spectrum - Station %d",k))
@@ -75,3 +74,5 @@ for k = 1:num_stations
     xlim([-20 20])
 
 end
+
+sgtitle("Baseband LPF Verification - Recovered Audio Spectra")

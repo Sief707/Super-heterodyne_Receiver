@@ -29,7 +29,14 @@ fdm = build_fdm_signal(messages,Fs);
 
 colors = lines(num_stations);
 
+%% Storage for aligned signals
+recovered_all = cell(num_stations,1);
+original_all  = cell(num_stations,1);
+
 %% Loop through stations
+figure
+sgtitle("Original vs Recovered Signals")
+
 for k = 1:num_stations
 
     disp(["Computing signal quality for station ", num2str(k)])
@@ -64,31 +71,29 @@ for k = 1:num_stations
     recovered = signals_out.signal;
     Fs_audio  = signals_out.Fs;
 
-    %% Normalize signals
-    original  = original / max(abs(original));
-    recovered = recovered / max(abs(recovered));
+    %% Align signals using cross-correlation
+    [c,lags] = xcorr(recovered, original);
+    [~,idx] = max(abs(c));
+    delay = lags(idx);
 
-   %% -------------------------------------------------
-   %% Align signals using cross-correlation
-   %% -------------------------------------------------
+    if delay > 0
+        recovered = recovered(delay+1:end);
+    else
+        original = original(-delay+1:end);
+    end
 
-   [c,lags] = xcorr(recovered, original);
+    %% Force equal lengths
+    min_len = min(length(original), length(recovered));
+    original  = original(1:min_len);
+    recovered = recovered(1:min_len);
 
-   [~,idx] = max(abs(c));
+    %% Optimal amplitude scaling (better than normalization)
+    alpha = (original'*recovered)/(recovered'*recovered);
+    recovered = alpha * recovered;
 
-   delay = lags(idx);
-
-   if delay > 0
-      recovered = recovered(delay+1:end);
-   else
-     original = original(-delay+1:end);
-   end
-
-   % Force equal lengths safely
-   min_len = min(length(original), length(recovered));
-
-   original  = original(1:min_len);
-   recovered = recovered(1:min_len);
+    %% Store aligned signals
+    original_all{k}  = original;
+    recovered_all{k} = recovered;
 
     %% Compute SNR
     error_signal = original - recovered;
@@ -105,14 +110,64 @@ for k = 1:num_stations
     disp(SNR)
 
     %% Plot comparison
-    figure
+    subplot(num_stations,1,k)
 
-    subplot(2,1,1)
-    plot(original,'Color',colors(k,:))
-    title(sprintf("Original Signal - Station %d",k))
+    h1 = plot(original,'k','LineWidth',1.2);
+    hold on
+    h2 = plot(recovered,'r','LineWidth',1.2);
 
-    subplot(2,1,2)
-    plot(recovered,'Color',colors(k,:))
-    title(sprintf("Recovered Signal - Station %d",k))
+    grid on
+    title(sprintf("Station %d",k))
+    xlabel("Samples")
+    ylabel("Amplitude")
+
+    if k == 1
+        legend([h1 h2],["Original","Recovered"])
+    end
+
+end
+
+%% =====================================================
+%% Spectrum Comparison (Original vs Recovered)
+%% =====================================================
+
+figure
+sgtitle("Original vs Recovered Spectrum")
+
+for k = 1:num_stations
+
+    original  = original_all{k};
+    recovered = recovered_all{k};
+
+    N = length(original);
+
+    %% FFT
+    Y_orig = fftshift(abs(fft(original)));
+    Y_rec  = fftshift(abs(fft(recovered)));
+
+    %% Normalize spectra with common scale
+    scale = max([Y_orig; Y_rec]);
+    Y_orig = Y_orig / scale;
+    Y_rec  = Y_rec / scale;
+
+    %% Frequency axis
+    f = (-N/2:N/2-1)*(Fs_audio/N);
+
+    subplot(num_stations,1,k)
+
+    h1 = plot(f/1000, Y_orig, 'k','LineWidth',1.2);
+    hold on
+    h2 = plot(f/1000, Y_rec, 'r','LineWidth',1.2);
+
+    grid on
+    title(sprintf("Station %d Spectrum",k))
+    xlabel("Frequency (kHz)")
+    ylabel("Normalized Magnitude")
+
+    xlim([-10 10])
+
+    if k == 1
+        legend([h1 h2],["Original","Recovered"])
+    end
 
 end

@@ -1,6 +1,3 @@
-clc
-clear
-close all
 
 disp("=== TEST: DECIMATION ===")
 
@@ -18,8 +15,8 @@ Fs       = signals.Fs;
 
 num_stations = length(messages);
 
-disp("Number of stations loaded:")
-disp(num_stations)
+fprintf("Number of stations loaded: %d\n",num_stations)
+
 
 %% Build multiplexed FDM signal
 fdm = build_fdm_signal(messages,Fs);
@@ -59,12 +56,11 @@ for k = 1:num_stations
     audio = signals_out.signal;
     Fs_audio = signals_out.Fs;
 
-    disp("Recovered sampling frequency:")
-    disp(Fs_audio)
+    disp("Recovered sampling frequency: %d\n",Fs_audio)
 
     %% Play audio
     sound(audio, Fs_audio)
 
     pause(5)   % allow audio playback before next station
-
+    %saveas(gcf,"../results/test_decimation/station_"+k+"_decimated_audio.png")
 end

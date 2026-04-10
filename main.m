@@ -2,79 +2,57 @@ clc
 clear
 close all
 
-disp("=== SUPERHETERODYNE RECEIVER ===")
+disp("==========================================")
+disp(" SUPERHETERODYNE RECEIVER SYSTEM ")
+disp("==========================================")
 
-% -------------------------------------------------
-% Load configuration
-% -------------------------------------------------
+%% Load configuration
 
+disp("Loading system configuration...")
 config = system_config();
 
-% compute selected carrier frequency
-Fc = config.Fc0 + (config.station-1)*config.deltaF;
+%% Load signals
 
-% compute local oscillator
-f_LO = Fc + config.IF;
-
-% -------------------------------------------------
-% Load signal
-% -------------------------------------------------
-
+disp("Loading audio stations...")
 signals = load_signals();
 
-% -------------------------------------------------
-% Interpolation
-% -------------------------------------------------
+%% Interpolation
 
-signals = interpolate_signal(signals,config.L);
+disp("Interpolating signals (increase sampling rate)...")
+signals = interpolate_signal(signals, config.L);
 
-message = signals.signal;
 Fs = signals.Fs;
+messages = signals.messages;
 
-% -------------------------------------------------
-% Build FDM signal
-% -------------------------------------------------
+%% Build FDM signal
 
-messages = {message , message};
+disp("Building FDM multiplexed transmitter signal...")
+fdm_signal = build_fdm_signal(messages, Fs);
 
-fdm = build_fdm_signal(messages,Fs);
+%% Receiver
 
-% -------------------------------------------------
-% Receiver chain
-% -------------------------------------------------
+disp("Running receiver system...")
+audio = receiver_system(fdm_signal, Fs, config);
 
-rf = rf_stage_filter(fdm,Fs,Fc);
+%% Normalize
 
-mixed = mixer_stage(rf,Fs,f_LO);
-
-if_signal = if_stage_filter(mixed,Fs);
-
-baseband = baseband_mixer(if_signal,Fs);
-
-audio_high = baseband_lpf(baseband,Fs);
-
-% -------------------------------------------------
-% Decimation
-% -------------------------------------------------
-
-temp.signal = audio_high;
-temp.Fs = Fs;
-
-signals_out = decimate_signal(temp,config.L);
-
-audio = signals_out.signal;
-Fs_audio = signals_out.Fs;
-
-% -------------------------------------------------
-% Normalize audio for playback
-% -------------------------------------------------
-
+disp("Normalizing recovered audio...")
 audio = audio / max(abs(audio));
 
-% -------------------------------------------------
-% Playback
-% -------------------------------------------------
+%% Audio sampling frequency
+
+Fs_audio = Fs / config.L;
+
+%% Playback
 
 disp("Playing recovered station...")
-sound(audio,Fs_audio)
-audiowrite("results/recovered_station.wav",audio,Fs_audio)
+sound(audio, Fs_audio)
+
+%% Save audio
+
+disp("Saving recovered audio to results folder...")
+audiowrite("results/recovered_station.wav", audio, Fs_audio)
+
+disp("==========================================")
+disp(" SYSTEM EXECUTION COMPLETED ")
+disp("==========================================")
