@@ -59,7 +59,9 @@ sound(audio, Fs_audio)
 
 %% Save audio
 disp("Saving recovered audio to results folder...")
-audiowrite("results/recovered_station.wav", audio, Fs_audio)
+this_file = mfilename('fullpath');
+[current_folder,~,~] = fileparts(this_file);
+audiowrite(fullfile(current_folder, "recovered_station.wav"), audio, Fs_audio)
 disp("==========================================")
 disp(" SYSTEM EXECUTION COMPLETED ")
 disp("==========================================")
@@ -1080,13 +1082,12 @@ end
 %% ================= LOADING THE SIGNALS =================
 function signals = load_signals()
 
-% Locate project root directory
+% Locate current file directory only (no project structure)
 this_file = mfilename('fullpath');
 [src_folder,~,~] = fileparts(this_file);
-project_root = src_folder;
 
-% Define path
-audio_folder = fullfile(project_root,"data","audio_files");
+% Use same folder directly
+audio_folder = src_folder;
 
 % Mapping:
 % 1 -> Quran
@@ -1191,19 +1192,21 @@ for k = 1:num_signals
 end
 
 % Use the shortest signal length to ensure equal size
-N = min(lengths);
+N = max(lengths);
 
 % Initialize multiplexed FDM signal
 fdm_signal = zeros(N,1);
 
 % Loop through all stations
 for n = 1:num_signals
-    
+
+    signal = messages{n};
+    if length(signal) < N
+        signal = [signal; zeros(N - length(signal),1)];
+    end
+	
     % Compute carrier frequency for the current station
     Fc = base_carrier + (n-1)*deltaF;
-    
-    % Truncate message to the common signal length
-    signal = messages{n}(1:N);
     
     % Perform DSB-SC modulation
     modulated = dsb_sc_modulate(signal, Fc, Fs);
@@ -1373,7 +1376,7 @@ function signals_out = decimate_signal(signals_in, L)
 signal = signals_in.signal;
 Fs     = signals_in.Fs;
 % Downsample the signal by factor L
-signal_decimated = signal(1:L:end);
+signal_decimated = signal(1:L:floor(length(signal)/L)*L);
 % Update the sampling frequency
 Fs_new = Fs / L;
 % Store outputs in a structure
