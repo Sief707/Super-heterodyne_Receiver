@@ -22,8 +22,3 @@
 4. Receiver
 5. Visualization
 6. Testing
-
-## Rules
-- No magic numbers
-- No long scripts
-- One responsibility per function
